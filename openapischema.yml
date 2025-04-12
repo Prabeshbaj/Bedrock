@@ -1,0 +1,55 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Follow-up Question Generator API",
+    "version": "1.0.0",
+    "description": "API for generating follow-up questions in JSON format"
+  },
+  "paths": {
+    "/generateFollowUps": {
+      "post": {
+        "summary": "Generate follow-up questions",
+        "description": "Analyzes a message and generates relevant follow-up questions",
+        "operationId": "generateFollowUps",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "message": {
+                    "type": "string",
+                    "description": "The message to analyze for generating follow-up questions"
+                  }
+                },
+                "required": ["message"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Follow-up questions generated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "followUpQuestions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "List of follow-up questions"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
