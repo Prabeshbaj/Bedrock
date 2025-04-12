@@ -4,7 +4,7 @@ Description: 'CloudFormation template to create an Amazon Bedrock Agent (without
 Parameters:
   BedrockModelId:
     Type: String
-    Default: anthropic.claude-3-sonnet-20240229-v1:0
+    Default: anthropic.claude-3-5-sonnet-20240620-v1:0
     Description: The Bedrock model ID to use for the agent
   
   AgentName:
