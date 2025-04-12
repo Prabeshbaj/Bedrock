@@ -40,8 +40,6 @@ jobs:
             --capabilities CAPABILITY_IAM \
             --parameter-overrides \
               AgentName=${{ secrets.AGENT_NAME || 'MyBedrockAgent' }} \
-              ActionGroupName=${{ secrets.ACTION_GROUP_NAME || 'MyActionGroup' }} \
-              LambdaFunctionName=${{ secrets.LAMBDA_FUNCTION_NAME || 'bedrock-agent-action-lambda' }} \
               AgentInstruction="${{ env.instruction }}"
       
       - name: Get stack outputs
