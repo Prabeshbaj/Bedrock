@@ -1,0 +1,283 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template to create an Amazon Bedrock Agent with a Lambda action group'
+
+Parameters:
+  BedrockModelId:
+    Type: String
+    Default: anthropic.claude-3-sonnet-20240229-v1:0
+    Description: The Bedrock model ID to use for the agent
+  
+  AgentName:
+    Type: String
+    Default: MyBedrockAgent
+    Description: Name for the Bedrock Agent
+  
+  ActionGroupName:
+    Type: String
+    Default: MyActionGroup
+    Description: Name for the Action Group
+  
+  LambdaFunctionName:
+    Type: String
+    Default: bedrock-agent-action-lambda
+    Description: Name for the Lambda function
+
+Resources:
+  # IAM Role for the Lambda function
+  LambdaExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+
+  # IAM Role for Bedrock Agent to invoke Lambda
+  BedrockAgentRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: bedrock.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AmazonBedrockFullAccess'
+      Policies:
+        - PolicyName: InvokeLambdaPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: 'lambda:InvokeFunction'
+                Resource: !GetAtt LambdaFunction.Arn
+
+  # Lambda function for the action group
+  LambdaFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: !Ref LambdaFunctionName
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: python3.12
+      Timeout: 60
+      MemorySize: 256
+      Code:
+        ZipFile: |
+          import json
+          import logging
+
+          # Configure logging
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          def lambda_handler(event, context):
+              """
+              Lambda handler for Bedrock Agent Action Group
+              """
+              logger.info(f"Received event: {json.dumps(event)}")
+              
+              try:
+                  # Extract API parameters from the event
+                  api_path = event.get('apiPath', '')
+                  parameters = event.get('parameters', [])
+                  request_body = event.get('requestBody', {})
+                  
+                  # Convert parameters list to dictionary for easier access
+                  param_dict = {}
+                  for param in parameters:
+                      param_dict[param['name']] = param['value']
+                  
+                  logger.info(f"API Path: {api_path}")
+                  logger.info(f"Parameters: {param_dict}")
+                  logger.info(f"Request Body: {request_body}")
+                  
+                  # Example response based on the API path
+                  if api_path == '/getWeather':
+                      return {
+                          'response': {
+                              'weather': 'sunny',
+                              'temperature': '75°F',
+                              'location': param_dict.get('location', 'Unknown')
+                          }
+                      }
+                  elif api_path == '/getUserInfo':
+                      return {
+                          'response': {
+                              'userId': param_dict.get('userId', 'Unknown'),
+                              'name': 'John Doe',
+                              'email': 'john.doe@example.com'
+                          }
+                      }
+                  else:
+                      # Default response for unknown API paths
+                      return {
+                          'response': {
+                              'message': f'Executed action for {api_path}',
+                              'parameters': param_dict
+                          }
+                      }
+                      
+              except Exception as e:
+                  logger.error(f"Error processing request: {str(e)}")
+                  return {
+                      'response': {
+                          'error': str(e)
+                      }
+                  }
+
+      # Lambda permission to allow Bedrock to invoke it
+  LambdaPermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !GetAtt LambdaFunction.Arn
+      Principal: bedrock.amazonaws.com
+      SourceArn: !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:agent/*'
+      
+  # Bedrock Agent
+  BedrockAgent:
+    Type: 'AWS::Bedrock::Agent'
+    Properties:
+      AgentName: !Ref AgentName
+      FoundationModel: !Ref BedrockModelId
+      AgentResourceRoleArn: !GetAtt BedrockAgentRole.Arn
+      Description: "Agent created via CloudFormation"
+      IdleSessionTTLInSeconds: 1800
+      Instruction: "You are a helpful assistant that can help users with various tasks."
+
+  # Bedrock Agent Action Group
+  BedrockActionGroup:
+    Type: 'AWS::Bedrock::AgentActionGroup'
+    Properties:
+      AgentId: !Ref BedrockAgent
+      ActionGroupName: !Ref ActionGroupName
+      Description: "Basic action group powered by Lambda"
+      ActionGroupExecutor:
+        Lambda: !GetAtt LambdaFunction.Arn
+      ApiSchema:
+        Payload: >
+          {
+            "openapi": "3.0.0",
+            "info": {
+              "title": "Basic Agent Actions API",
+              "version": "1.0.0",
+              "description": "API for basic agent actions"
+            },
+            "paths": {
+              "/getWeather": {
+                "get": {
+                  "summary": "Get weather information",
+                  "description": "Returns the current weather for a specified location",
+                  "operationId": "getWeather",
+                  "parameters": [
+                    {
+                      "name": "location",
+                      "in": "query",
+                      "description": "City name or location",
+                      "required": true,
+                      "schema": {
+                        "type": "string"
+                      }
+                    }
+                  ],
+                  "responses": {
+                    "200": {
+                      "description": "Weather information",
+                      "content": {
+                        "application/json": {
+                          "schema": {
+                            "type": "object",
+                            "properties": {
+                              "weather": {
+                                "type": "string"
+                              },
+                              "temperature": {
+                                "type": "string"
+                              },
+                              "location": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "/getUserInfo": {
+                "get": {
+                  "summary": "Get user information",
+                  "description": "Returns information about a user",
+                  "operationId": "getUserInfo",
+                  "parameters": [
+                    {
+                      "name": "userId",
+                      "in": "query",
+                      "description": "User ID",
+                      "required": true,
+                      "schema": {
+                        "type": "string"
+                      }
+                    }
+                  ],
+                  "responses": {
+                    "200": {
+                      "description": "User information",
+                      "content": {
+                        "application/json": {
+                          "schema": {
+                            "type": "object",
+                            "properties": {
+                              "userId": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "email": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+  # Bedrock Agent Alias
+  BedrockAgentAlias:
+    Type: 'AWS::Bedrock::AgentAlias'
+    Properties:
+      AgentId: !Ref BedrockAgent
+      AgentAliasName: 'prod'
+      Description: 'Production alias for the agent'
+
+Outputs:
+  BedrockAgentId:
+    Description: The ID of the created Bedrock Agent
+    Value: !Ref BedrockAgent
+  
+  BedrockAgentAliasId:
+    Description: The ID of the created Bedrock Agent Alias
+    Value: !Ref BedrockAgentAlias
+  
+  LambdaFunctionArn:
+    Description: The ARN of the Lambda function
+    Value: !GetAtt LambdaFunction.Arn
+  
+  ActionGroupId:
+    Description: The ID of the action group
+    Value: !Ref BedrockActionGroup
