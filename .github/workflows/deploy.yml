@@ -1,0 +1,51 @@
+name: Deploy CloudFormation Stack
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '**.yaml'
+      - '**.yml'
+      - '.github/workflows/**'
+      - 'agent-instruction.md'
+  workflow_dispatch:  # Allows manual triggering
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      
+      - name: Read agent instruction from file
+        id: agent-instruction
+        run: |
+          INSTRUCTION=$(cat agent-instruction.md)
+          echo "instruction<<EOF" >> $GITHUB_ENV
+          echo "$INSTRUCTION" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+          
+      - name: Deploy CloudFormation stack
+        run: |
+          aws cloudformation deploy \
+            --template-file bedrock-agent-template.yaml \
+            --stack-name bedrock-agent-stack \
+            --capabilities CAPABILITY_IAM \
+            --parameter-overrides \
+              AgentName=${{ secrets.AGENT_NAME || 'MyBedrockAgent' }} \
+              ActionGroupName=${{ secrets.ACTION_GROUP_NAME || 'MyActionGroup' }} \
+              LambdaFunctionName=${{ secrets.LAMBDA_FUNCTION_NAME || 'bedrock-agent-action-lambda' }} \
+              AgentInstruction="${{ env.instruction }}"
+      
+      - name: Get stack outputs
+        if: success()
+        run: |
+          echo "Deployment successful. Stack details:"
+          aws cloudformation describe-stacks --stack-name bedrock-agent-stack --query "Stacks[0].Outputs" --output table

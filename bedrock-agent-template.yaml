@@ -133,7 +133,7 @@ Resources:
                       }
                   }
 
-      # Lambda permission to allow Bedrock to invoke it
+  # Lambda permission to allow Bedrock to invoke it
   LambdaPermission:
     Type: 'AWS::Lambda::Permission'
     Properties:
