@@ -27,10 +27,12 @@ jobs:
       - name: Read agent instruction from file
         id: agent-instruction
         run: |
-          INSTRUCTION=$(cat agent-instruction.md)
-          echo "instruction<<EOF" >> $GITHUB_ENV
-          echo "$INSTRUCTION" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
+          INSTRUCTION_CONTENT=$(cat agent-instruction.md)
+          # Escape special characters for GitHub Actions
+          INSTRUCTION_CONTENT="${INSTRUCTION_CONTENT//'%'/'%25'}"
+          INSTRUCTION_CONTENT="${INSTRUCTION_CONTENT//$'\n'/'%0A'}"
+          INSTRUCTION_CONTENT="${INSTRUCTION_CONTENT//$'\r'/'%0D'}"
+          echo "instruction=$INSTRUCTION_CONTENT" >> $GITHUB_OUTPUT
           
       - name: Deploy CloudFormation stack
         run: |
@@ -40,7 +42,7 @@ jobs:
             --capabilities CAPABILITY_IAM \
             --parameter-overrides \
               AgentName=${{ secrets.AGENT_NAME || 'MyBedrockAgent' }} \
-              AgentInstruction="${{ env.instruction }}"
+              AgentInstruction="${{ steps.agent-instruction.outputs.instruction }}"
       
       - name: Get stack outputs
         if: success()
